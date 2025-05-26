@@ -170,7 +170,7 @@ export function LibraryContent() {
           { key: 'ALL' as const, label: 'All Books', count: shelfCounts.ALL },
           { key: 'WANT' as const, label: 'Want to Read', count: shelfCounts.WANT },
           { key: 'READING' as const, label: 'Reading', count: shelfCounts.READING },
-          { key: 'READ' as const, label: 'Read', count: shelfCounts.read },
+          { key: 'READ' as const, label: 'Read', count: shelfCounts.READ },
         ].map(({ key, label, count }) => (
           <button
             key={key}
@@ -443,7 +443,7 @@ function BookCard({ userBook, viewMode, onRating, onShelfMove, onRemove }: BookC
             ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
             : 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300'
         }`}>
-          {userBook.shelf === 'read' ? 'Read' : userBook.shelf === 'READING' ? 'Reading' : 'Want'}
+          {userBook.shelf === 'READ' ? 'Read' : userBook.shelf === 'READING' ? 'Reading' : 'Want'}
         </span>
       </div>
     </div>

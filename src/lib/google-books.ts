@@ -66,11 +66,16 @@ class GoogleBooksService {
         projection: 'full',
       });
 
+      // Add timeout using AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(`${this.baseUrl}?${searchParams}`, {
         headers: {
           'Accept': 'application/json',
         },
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -87,6 +92,12 @@ class GoogleBooksService {
 
       return data.items.map(item => this.normalizeBookData(item));
     } catch (error) {
+      if (error instanceof Error) {
+        if (error.name === 'AbortError') {
+          console.error('Google Books API search timeout');
+          throw new Error('Google Books API request timed out after 10 seconds');
+        }
+      }
       console.error('Google Books API search error:', error);
       throw error;
     }
@@ -112,11 +123,16 @@ class GoogleBooksService {
    */
   async getBookById(googleId: string): Promise<GoogleBooksSearchResult | null> {
     try {
+      // Add timeout using AbortController
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10 second timeout
+      
       const response = await fetch(`${this.baseUrl}/${googleId}?key=${this.apiKey}`, {
         headers: {
           'Accept': 'application/json',
         },
-      });
+        signal: controller.signal,
+      }).finally(() => clearTimeout(timeoutId));
 
       if (!response.ok) {
         return null;
@@ -125,6 +141,10 @@ class GoogleBooksService {
       const item: GoogleBooksItem = await response.json();
       return this.normalizeBookData(item);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error('Google Books get book timeout');
+        return null;
+      }
       console.error('Google Books get book error:', error);
       return null;
     }

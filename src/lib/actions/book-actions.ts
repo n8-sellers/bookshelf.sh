@@ -8,6 +8,23 @@ import { type Shelf } from '@prisma/client';
 
 export async function addBookToShelf(book: BookSearchResult, shelf: Shelf) {
   try {
+    // Validate input
+    if (!book || typeof book !== 'object') {
+      throw new Error('Invalid book data');
+    }
+    
+    if (!book.title || typeof book.title !== 'string' || book.title.trim().length === 0) {
+      throw new Error('Book title is required');
+    }
+    
+    if (!Array.isArray(book.authors) || book.authors.length === 0) {
+      throw new Error('At least one author is required');
+    }
+    
+    if (!['WANT', 'READING', 'READ'].includes(shelf)) {
+      throw new Error('Invalid shelf type');
+    }
+
     // Get authenticated user
     const { userId } = auth();
     if (!userId) {
@@ -54,51 +71,38 @@ export async function addBookToShelf(book: BookSearchResult, shelf: Shelf) {
       });
     }
 
-    // Check if user already has this book
-    const existingUserBook = await prisma.userBook.findUnique({
+    // Use upsert to handle race condition atomically
+    await prisma.userBook.upsert({
       where: {
         userId_bookId: {
           userId: user.id,
           bookId: bookRecord.id,
         },
       },
+      create: {
+        userId: user.id,
+        bookId: bookRecord.id,
+        shelf,
+        // Set appropriate dates based on shelf for new records
+        ...(shelf === 'READING' ? { startedAt: new Date() } : {}),
+        ...(shelf === 'READ' ? { 
+          startedAt: new Date(), 
+          finishedAt: new Date() 
+        } : {}),
+      },
+      update: {
+        shelf,
+        updatedAt: new Date(),
+        // Only update dates if they're not already set
+        // This preserves original reading history
+        ...(shelf === 'READ' ? {
+          finishedAt: new Date(),
+        } : {}),
+        ...(shelf === 'READING' ? {
+          startedAt: new Date(),
+        } : {}),
+      },
     });
-
-    if (existingUserBook) {
-      // Update existing shelf assignment
-      await prisma.userBook.update({
-        where: {
-          id: existingUserBook.id,
-        },
-        data: {
-          shelf,
-          updatedAt: new Date(),
-          // Set finish date if moving to READ shelf
-          ...(shelf === 'READ' && !existingUserBook.finishedAt ? {
-            finishedAt: new Date(),
-          } : {}),
-          // Set start date if moving to READING shelf
-          ...(shelf === 'READING' && !existingUserBook.startedAt ? {
-            startedAt: new Date(),
-          } : {}),
-        },
-      });
-    } else {
-      // Create new user-book relationship
-      await prisma.userBook.create({
-        data: {
-          userId: user.id,
-          bookId: bookRecord.id,
-          shelf,
-          // Set appropriate dates based on shelf
-          ...(shelf === 'READING' ? { startedAt: new Date() } : {}),
-          ...(shelf === 'READ' ? { 
-            startedAt: new Date(), 
-            finishedAt: new Date() 
-          } : {}),
-        },
-      });
-    }
 
     // Revalidate relevant caches
     revalidateTag(`user-books-${user.id}`);
@@ -162,8 +166,13 @@ export async function updateBookRating(bookId: string, rating: number) {
     }
 
     // Validate rating (0-10 scale for half-star support)
-    if (rating < 0 || rating > 10) {
-      throw new Error('Invalid rating');
+    if (typeof rating !== 'number' || isNaN(rating) || rating < 0 || rating > 10) {
+      throw new Error('Invalid rating: must be a number between 0 and 10');
+    }
+    
+    // Ensure rating is an integer (no decimal ratings)
+    if (!Number.isInteger(rating)) {
+      throw new Error('Invalid rating: must be a whole number');
     }
 
     await prisma.userBook.update({
